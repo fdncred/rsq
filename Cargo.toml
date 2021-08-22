@@ -1,0 +1,17 @@
+[package]
+name = "rsq"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.43"
+chrono = "0.4.19"
+itertools = "0.10.1"
+lazy_static = "1.4.0"
+log = "0.4.14"
+paw = "1.0.0"
+rusqlite = {version = "0.25.3", features = ["chrono", "bundled", "trace"]}
+simplelog = "0.10.0"
+structopt = "0.3.22"
