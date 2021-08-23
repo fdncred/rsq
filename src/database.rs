@@ -1,14 +1,13 @@
 use crate::history_item::HistoryItem;
+use anyhow::Result;
 use chrono::prelude::{DateTime, TimeZone};
 use chrono::Utc;
 use itertools::Itertools;
 use log::debug;
-use rusqlite::{params, Connection, Row, Transaction};
-use std::time::{Duration, UNIX_EPOCH};
-// use std::error::Error;
-use anyhow::Result;
 use log::info;
+use rusqlite::{params, Connection, Row, Transaction};
 use std::path::Path;
+use std::time::{Duration, UNIX_EPOCH};
 
 pub trait Database {
     fn save(&mut self, h: &HistoryItem) -> Result<()>;
@@ -53,7 +52,8 @@ impl Sqlite {
         }
 
         //TODO: Investigate
-        // https://github.com/ivanceras/r2d2-sqlite
+        // * https://github.com/ivanceras/r2d2-sqlite
+        // * https://lib.rs/crates/serde_rusqlite
 
         let mut conn = Connection::open(format!("file:{}", path.as_os_str().to_str().unwrap()))?;
         set_log_mode(&mut conn, sql_log_mode);
@@ -112,17 +112,6 @@ impl Sqlite {
     }
 
     fn save_raw(tx: &mut Transaction, h: &HistoryItem) -> Result<usize> {
-        // history_id,
-        // command_line,
-        // command,
-        // command_params,
-        // cwd,
-        // duration,
-        // exit_status,
-        // session_id,
-        // timestamp,
-        // run_count,
-
         let cmd_params = match h.command_params.as_ref() {
             Some(p) => &p,
             None => "",
@@ -136,25 +125,25 @@ impl Sqlite {
         )?)
     }
 
-    fn convert_time(h: &HistoryItem) {
-        // example of how to convert timestamp_nanos() to regular time
-        // use chrono::prelude::DateTime;
-        // use chrono::Utc;
-        // use std::time::{Duration, UNIX_EPOCH};
+    // fn convert_time(h: &HistoryItem) {
+    //     // example of how to convert timestamp_nanos() to regular time
+    //     // use chrono::prelude::DateTime;
+    //     // use chrono::Utc;
+    //     // use std::time::{Duration, UNIX_EPOCH};
 
-        // Creates a new SystemTime from the specified number of whole seconds
-        let d = UNIX_EPOCH + Duration::from_nanos(1626813332831940400);
-        // Create DateTime from SystemTime
-        let datetime = DateTime::<Utc>::from(d);
+    //     // Creates a new SystemTime from the specified number of whole seconds
+    //     let d = UNIX_EPOCH + Duration::from_nanos(1626813332831940400);
+    //     // Create DateTime from SystemTime
+    //     let datetime = DateTime::<Utc>::from(d);
 
-        // I'm not sure there's a way to confidently split up a timestamp
-        // let dt = NaiveDateTime::from_timestamp(1626813332, 831940400);
-        // println!("NDT {}", dt.format("%Y-%m-%d %H:%M:%S.%f").to_string());
+    //     // I'm not sure there's a way to confidently split up a timestamp
+    //     // let dt = NaiveDateTime::from_timestamp(1626813332, 831940400);
+    //     // println!("NDT {}", dt.format("%Y-%m-%d %H:%M:%S.%f").to_string());
 
-        // Formats the combined date and time with the specified format string.
-        let timestamp_str = datetime.format("%Y-%m-%d %H:%M:%S.%f").to_string();
-        println! {"{}",timestamp_str};
-    }
+    //     // Formats the combined date and time with the specified format string.
+    //     let timestamp_str = datetime.format("%Y-%m-%d %H:%M:%S.%f").to_string();
+    //     println! {"{}",timestamp_str};
+    // }
 
     fn query_history(row: &Row) -> Result<HistoryItem> {
         debug!("constructing historyitem from row");
@@ -351,12 +340,6 @@ impl Database for Sqlite {
         let mut stmt = self.conn.prepare(query.as_str())?;
         // debug!("SQL: {}", stmt.expanded_sql().unwrap());
 
-        // let mut rows = stmt.query([])?;
-        // for row in rows.next()? {
-        //     let hi = Self::query_history(row)?;
-        //     hist_rows.push(hi);
-        // }
-
         let rows = stmt.query_and_then([], |row| Self::query_history(row))?;
         for row in rows {
             hist_rows.push(row?);
@@ -421,34 +404,11 @@ impl Database for Sqlite {
     }
 
     fn before(&self, timestamp: chrono::DateTime<Utc>, count: i64) -> Result<Vec<HistoryItem>> {
-        // let res = conn
-        //     .execute(
-        //         "select * from history_items where timestamp < ?1 order by timestamp desc limit ?2",
-        //     )
-        //     .bind(timestamp.timestamp_nanos())
-        //     .bind(count)
-        //     .map(Self::query_history)
-        //     .fetch_all(&self.pool)
-        //     .await?;
-
-        // Ok(res)
-
         let mut hist_rows: Vec<HistoryItem> = Vec::new();
 
         let mut stmt = self.conn.prepare(
             "select * from history_items where timestamp < ?1 order by timestamp desc limit ?2",
         )?;
-        // let rows = stmt.query_map(params![timestamp.timestamp_nanos(), count], |row| {
-        //     let res = Self::query_history(row);
-        //     hist_rows.push(res.unwrap());
-        //     Ok(())
-        // })?;
-
-        // let mut rows = stmt.query([timestamp.timestamp_nanos(), count])?;
-        // for row in rows.next()? {
-        //     let hi = Self::query_history(row)?;
-        //     hist_rows.push(hi);
-        // }
 
         let rows = stmt.query_and_then([timestamp.timestamp_nanos(), count], |row| {
             Self::query_history(row)
@@ -499,40 +459,13 @@ impl Database for Sqlite {
     }
 
     fn query_history(&self, query: &str) -> Result<Vec<HistoryItem>> {
-        // let res = conn
-        //     .execute(query)
-        //     .map(Self::query_history)
-        //     .fetch_all(&self.pool)
-        //     .await?;
-
-        // Ok(res)
-
         let mut hist_rows: Vec<HistoryItem> = Vec::new();
         let mut stmt = self.conn.prepare(query)?;
-
-        // let rows = stmt.query_map([], |row| {
-        //     let res = Self::query_history(row);
-        //     hist_rows.push(res.unwrap());
-        //     Ok(())
-        // })?;
-
-        // let mut rows = stmt.query([])?;
-        // for row in rows.next()? {
-        //     let hi = Self::query_history(row)?;
-        //     hist_rows.push(hi);
-        // }
 
         let rows = stmt.query_and_then([], |row| Self::query_history(row))?;
         for row in rows {
             hist_rows.push(row?);
         }
-
-        // let rows = stmt.query([])?;
-        // rows.map(|r| {
-        //     let res = Self::query_history(r);
-        //     hist_rows.push(res.unwrap());
-        //     Ok(())
-        // });
 
         Ok(hist_rows)
     }

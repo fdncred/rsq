@@ -108,12 +108,6 @@ fn main(args: Args) -> Result<(), anyhow::Error> {
     debug!("starting main");
     start(args)?;
 
-    // let db_path = PathBuf::from("C:\\Users\\dschroeder\\source\\repos\\forks\\sql\\rsq\\hizzy3.db");
-    // let sqlite = match Sqlite::new(db_path, database::SqlLogMode::Trace) {
-    //     Ok(r) => r,
-    //     Err(e) => return Err(e), //return Err(anyhow::Error::msg("erro")),
-    // };
-
     Ok(())
 }
 
@@ -124,7 +118,6 @@ fn start(args: Args) -> Result<(), anyhow::Error> {
     // PathBuf::from("C:\\Users\\dschroeder\\source\\repos\\forks\\sql\\hiztery\\hizzy.db");
     let mut sqlite = match Sqlite::new(db_path, database::SqlLogMode::Trace) {
         Ok(r) => r,
-        // Err(e) => anyhow::bail!("unexpected error: {}", e),
         Err(e) => return Err(e),
     };
 
