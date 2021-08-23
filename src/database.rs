@@ -1,15 +1,15 @@
 use crate::history_item::HistoryItem;
 use chrono::prelude::{DateTime, TimeZone};
 use chrono::Utc;
-use std::time::{Duration, UNIX_EPOCH};
-// use itertools::Itertools;
+use itertools::Itertools;
 use log::debug;
 use rusqlite::{params, Connection, Row, Transaction};
+use std::time::{Duration, UNIX_EPOCH};
 // use std::error::Error;
-use std::path::Path;
-// use std::str::FromStr;
 use anyhow::Result;
 use log::info;
+use std::path::Path;
+// use std::str::FromStr;
 
 // #[derive(Debug)]
 // enum SqliteError {
@@ -28,28 +28,24 @@ pub trait Database {
     fn save_bulk(&mut self, h: &[HistoryItem]) -> Result<()>;
     fn load(&self, id: &str) -> Result<HistoryItem>;
     fn list(&self, max: Option<usize>, unique: bool) -> Result<Vec<HistoryItem>>;
-    // fn range(
-    //     &self,
-    //     from: chrono::DateTime<Utc>,
-    //     to: chrono::DateTime<Utc>,
-    // ) -> Result<Vec<HistoryItem>>;
+    fn range(
+        &self,
+        from: chrono::DateTime<Utc>,
+        to: chrono::DateTime<Utc>,
+    ) -> Result<Vec<HistoryItem>>;
     fn update(&self, h: &HistoryItem) -> Result<usize>;
-    // fn history_count(&self) -> Result<i64>;
-    // fn first(&self) -> Result<HistoryItem>;
-    // fn last(&self) -> Result<HistoryItem>;
-    // fn before(
-    //     &self,
-    //     timestamp: chrono::DateTime<Utc>,
-    //     count: i64,
-    // ) -> Result<Vec<HistoryItem>>;
-    // fn search(
-    //     &self,
-    //     limit: Option<i64>,
-    //     search_mode: SearchMode,
-    //     query: &str,
-    // ) -> Result<Vec<HistoryItem>>;
-    // fn query_history(&self, query: &str) -> Result<Vec<HistoryItem>>;
-    // fn delete_history_item(&self, id: i64) -> Result<u64>;
+    fn history_count(&self) -> Result<i64>;
+    fn first(&self) -> Result<HistoryItem>;
+    fn last(&self) -> Result<HistoryItem>;
+    fn before(&self, timestamp: chrono::DateTime<Utc>, count: i64) -> Result<Vec<HistoryItem>>;
+    fn search(
+        &self,
+        limit: Option<i64>,
+        search_mode: SearchMode,
+        query: &str,
+    ) -> Result<Vec<HistoryItem>>;
+    fn query_history(&self, query: &str) -> Result<Vec<HistoryItem>>;
+    fn delete_history_item(&self, id: i64) -> Result<u64>;
 }
 
 pub struct Sqlite {
@@ -426,132 +422,221 @@ impl Database for Sqlite {
         Ok(hist_rows)
     }
 
-    // fn range(
-    //     &self,
-    //     from: chrono::DateTime<Utc>,
-    //     to: chrono::DateTime<Utc>,
-    // ) -> Result<Vec<HistoryItem>> {
-    //     debug!("listing history from {:?} to {:?}", from, to);
+    fn range(
+        &self,
+        from: chrono::DateTime<Utc>,
+        to: chrono::DateTime<Utc>,
+    ) -> Result<Vec<HistoryItem>> {
+        debug!("listing history from {:?} to {:?}", from, to);
 
-    //     let res = conn.execute(
-    //         "select * from history_items where timestamp >= ?1 and timestamp <= ?2 order by timestamp asc",
-    //     )
-    //     .bind(from.timestamp_nanos())
-    //     .bind(to.timestamp_nanos())
-    //         .map(Self::query_history)
-    //     .fetch_all(&self.pool)
-    //     .await?;
+        // let res = conn.execute(
+        //     "select * from history_items where timestamp >= ?1 and timestamp <= ?2 order by timestamp asc",
+        // )
+        // .bind(from.timestamp_nanos())
+        // .bind(to.timestamp_nanos())
+        //     .map(Self::query_history)
+        // .fetch_all(&self.pool)
+        // .await?;
 
-    //     Ok(res)
-    // }
+        // let mut rows = stmt.query(params![id])?;
+        let mut hist_rows: Vec<HistoryItem> = Vec::new();
 
-    // fn first(&self) -> Result<HistoryItem> {
-    //     let res = conn
-    //         .execute(
-    //             "select * from history_items where duration >= 0 order by timestamp asc limit 1",
-    //         )
-    //         .map(Self::query_history)
-    //         .fetch_one(&self.pool)
-    //         .await?;
+        let mut stmt = self.conn.prepare("select * from history_items where timestamp >= ?1 and timestamp <= ?2 order by timestamp asc")?;
+        // let rows = stmt.query(params![from.timestamp_nanos(), to.timestamp_nanos()])?;
+        let rows = stmt.query_map(
+            params![from.timestamp_nanos(), to.timestamp_nanos()],
+            |row| {
+                let res = Self::query_history(row);
+                hist_rows.push(res.unwrap());
+                Ok(())
+            },
+        )?;
 
-    //     Ok(res)
-    // }
+        Ok(hist_rows)
+    }
 
-    // fn last(&self) -> Result<HistoryItem> {
-    //     let res = conn
-    //         .execute(
-    //             "select * from history_items where duration >= 0 order by timestamp desc limit 1",
-    //         )
-    //         .map(Self::query_history)
-    //         .fetch_one(&self.pool)
-    //         .await?;
+    fn history_count(&self) -> Result<i64> {
+        // let res: (i64,) = conn
+        //     .execute_as("select count(1) from history_items")
+        //     .fetch_one(&self.pool)
+        //     .await?;
 
-    //     Ok(res)
-    // }
+        // Ok(res.0)
 
-    // fn before(
-    //     &self,
-    //     timestamp: chrono::DateTime<Utc>,
-    //     count: i64,
-    // ) -> Result<Vec<HistoryItem>> {
-    //     let res = conn
-    //         .execute(
-    //             "select * from history_items where timestamp < ?1 order by timestamp desc limit ?2",
-    //         )
-    //         .bind(timestamp.timestamp_nanos())
-    //         .bind(count)
-    //         .map(Self::query_history)
-    //         .fetch_all(&self.pool)
-    //         .await?;
+        let mut stmt = self.conn.prepare("select count(1) from history_items")?;
 
-    //     Ok(res)
-    // }
+        // let ro = stmt.query_row(params![id], |r| Ok(Self::query_history(r)))?;
+        // ro
+        let cnt = stmt.query_row([], |r| r.get(0))?;
+        Ok(cnt)
+    }
 
-    // fn history_count(&self) -> Result<i64> {
-    //     let res: (i64,) = conn
-    //         .execute_as("select count(1) from history_items")
-    //         .fetch_one(&self.pool)
-    //         .await?;
+    fn first(&self) -> Result<HistoryItem> {
+        // let res = conn
+        //     .execute(
+        //         "select * from history_items where duration >= 0 order by timestamp asc limit 1",
+        //     )
+        //     .map(Self::query_history)
+        //     .fetch_one(&self.pool)
+        //     .await?;
 
-    //     Ok(res.0)
-    // }
+        // Ok(res)
 
-    // fn search(
-    //     &self,
-    //     limit: Option<i64>,
-    //     search_mode: SearchMode,
-    //     query: &str,
-    // ) -> Result<Vec<HistoryItem>> {
-    //     let query = query.to_string().replace("*", "%"); // allow wildcard char
-    //     let limit = limit.map_or("".to_owned(), |l| format!("limit {}", l));
+        let mut stmt = self.conn.prepare(
+            "select * from history_items where duration >= 0 order by timestamp asc limit 1",
+        )?;
 
-    //     let query = match search_mode {
-    //         SearchMode::Prefix => query,
-    //         SearchMode::FullText => format!("%{}", query),
-    //         SearchMode::Fuzzy => query.split("").join("%"),
-    //     };
+        let row = stmt.query_row([], |r| Ok(Self::query_history(r)))?;
+        row
+    }
 
-    //     let res = conn
-    //         .execute(
-    //             format!(
-    //                 "select * from history_items h
-    //             where command like ?1 || '%'
-    //             and timestamp = (
-    //                     select max(timestamp) from history_items
-    //                     where h.command = history_items.command
-    //                 )
-    //             order by timestamp desc {}",
-    //                 limit.clone()
-    //             )
-    //             .as_str(),
-    //         )
-    //         .bind(query)
-    //         .map(Self::query_history)
-    //         .fetch_all(&self.pool)
-    //         .await?;
+    fn last(&self) -> Result<HistoryItem> {
+        // let res = conn
+        //     .execute(
+        //         "select * from history_items where duration >= 0 order by timestamp desc limit 1",
+        //     )
+        //     .map(Self::query_history)
+        //     .fetch_one(&self.pool)
+        //     .await?;
 
-    //     Ok(res)
-    // }
+        // Ok(res)
+        let mut stmt = self.conn.prepare(
+            "select * from history_items where duration >= 0 order by timestamp desc limit 1",
+        )?;
 
-    // fn query_history(&self, query: &str) -> Result<Vec<HistoryItem>> {
-    //     let res = conn
-    //         .execute(query)
-    //         .map(Self::query_history)
-    //         .fetch_all(&self.pool)
-    //         .await?;
+        let row = stmt.query_row([], |r| Ok(Self::query_history(r)))?;
+        row
+    }
 
-    //     Ok(res)
-    // }
+    fn before(&self, timestamp: chrono::DateTime<Utc>, count: i64) -> Result<Vec<HistoryItem>> {
+        // let res = conn
+        //     .execute(
+        //         "select * from history_items where timestamp < ?1 order by timestamp desc limit ?2",
+        //     )
+        //     .bind(timestamp.timestamp_nanos())
+        //     .bind(count)
+        //     .map(Self::query_history)
+        //     .fetch_all(&self.pool)
+        //     .await?;
 
-    // fn delete_history_item(&self, id: i64) -> Result<u64> {
-    //     let res = conn
-    //         .execute("delete from history_items where history_id = ?1")
-    //         .bind(id)
-    //         .execute(&self.pool)
-    //         .await?
-    //         .rows_affected();
-    //     Ok(res)
-    // }
+        // Ok(res)
+
+        let mut hist_rows: Vec<HistoryItem> = Vec::new();
+
+        let mut stmt = self.conn.prepare(
+            "select * from history_items where timestamp < ?1 order by timestamp desc limit ?2",
+        )?;
+        let rows = stmt.query_map(params![timestamp.timestamp_nanos(), count], |row| {
+            let res = Self::query_history(row);
+            hist_rows.push(res.unwrap());
+            Ok(())
+        })?;
+
+        Ok(hist_rows)
+    }
+
+    fn search(
+        &self,
+        limit: Option<i64>,
+        search_mode: SearchMode,
+        query: &str,
+    ) -> Result<Vec<HistoryItem>> {
+        let query = query.to_string().replace("*", "%"); // allow wildcard char
+        let limit = limit.map_or("".to_owned(), |l| format!("limit {}", l));
+
+        let query = match search_mode {
+            SearchMode::Prefix => query,
+            SearchMode::FullText => format!("%{}", query),
+            SearchMode::Fuzzy => query.split("").join("%"),
+        };
+
+        let mut hist_rows: Vec<HistoryItem> = Vec::new();
+        let mut stmt = self.prepare(
+            format!(
+                "select * from history_items h
+            where command like ?1 || '%'
+            and timestamp = (
+                    select max(timestamp) from history_items
+                    where h.command = history_items.command
+                )
+            order by timestamp desc {}",
+                limit.clone()
+            )
+            .as_str(),
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            let res = Self::query_history(row);
+            hist_rows.push(res.unwrap());
+            Ok(())
+        })?;
+
+        Ok(hist_rows)
+
+        // .execute(
+        //     format!(
+        //         "select * from history_items h
+        //     where command like ?1 || '%'
+        //     and timestamp = (
+        //             select max(timestamp) from history_items
+        //             where h.command = history_items.command
+        //         )
+        //     order by timestamp desc {}",
+        //         limit.clone()
+        //     )
+        //     .as_str(),
+        // )
+        // .bind(query)
+        // .map(Self::query_history)
+        // .fetch_all(&self.pool)
+        // .await?;
+
+        // Ok(res)
+    }
+
+    fn query_history(&self, query: &str) -> Result<Vec<HistoryItem>> {
+        // let res = conn
+        //     .execute(query)
+        //     .map(Self::query_history)
+        //     .fetch_all(&self.pool)
+        //     .await?;
+
+        // Ok(res)
+
+        let mut hist_rows: Vec<HistoryItem> = Vec::new();
+        let mut stmt = self.conn.prepare(query)?;
+
+        let rows = stmt.query_map([], |row| {
+            let res = Self::query_history(row);
+            hist_rows.push(res.unwrap());
+            Ok(())
+        })?;
+
+        // let rows = stmt.query([])?;
+        // rows.map(|r| {
+        //     let res = Self::query_history(r);
+        //     hist_rows.push(res.unwrap());
+        //     Ok(())
+        // });
+
+        Ok(hist_rows)
+    }
+
+    fn delete_history_item(&self, id: i64) -> Result<u64> {
+        // let res = conn
+        //     .execute("delete from history_items where history_id = ?1")
+        //     .bind(id)
+        //     .execute(&self.pool)
+        //     .await?
+        //     .rows_affected();
+        // Ok(res)
+
+        let mut stmt = self
+            .conn
+            .prepare("delete from history_items where history_id = ?1")?;
+        stmt.execute(params![id])?;
+        Ok(1u64)
+    }
 }
 
 #[derive(Clone, Debug, Copy)]

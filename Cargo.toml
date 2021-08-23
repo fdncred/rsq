@@ -14,4 +14,4 @@ log = "0.4.14"
 paw = "1.0.0"
 rusqlite = {version = "0.25.3", features = ["chrono", "bundled", "trace"]}
 simplelog = "0.10.0"
-structopt = "0.3.22"
+structopt = { version = "0.3", features = ["paw"] }
