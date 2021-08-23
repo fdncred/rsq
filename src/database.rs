@@ -9,19 +9,6 @@ use std::time::{Duration, UNIX_EPOCH};
 use anyhow::Result;
 use log::info;
 use std::path::Path;
-// use std::str::FromStr;
-
-// #[derive(Debug)]
-// enum SqliteError {
-//     SomeError,
-//     SqliteError(err),
-// }
-
-// impl From<rusqlite::Error> for SqliteError {
-//     fn from(e: rusqlite::Error) -> Self {
-//         SqliteError::SqliteError(e.to_string())
-//     }
-// }
 
 pub trait Database {
     fn save(&mut self, h: &HistoryItem) -> Result<()>;
@@ -45,7 +32,7 @@ pub trait Database {
         query: &str,
     ) -> Result<Vec<HistoryItem>>;
     fn query_history(&self, query: &str) -> Result<Vec<HistoryItem>>;
-    fn delete_history_item(&self, id: i64) -> Result<u64>;
+    fn delete_history_item(&self, id: i64) -> Result<i64>;
 }
 
 pub struct Sqlite {
@@ -93,7 +80,7 @@ impl Sqlite {
 
         let history_table = r#"
         CREATE TABLE IF NOT EXISTS history_items (
-            history_id     INTEGER PRIMARY KEY NOT NULL,
+            history_id     INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp      INTEGER NOT NULL,
             duration       INTEGER NOT NULL,
             exit_status    INTEGER NOT NULL,
@@ -110,17 +97,18 @@ impl Sqlite {
         CREATE INDEX IF NOT EXISTS idx_history_timestamp on history_items(timestamp);
         CREATE INDEX IF NOT EXISTS idx_history_command on history_items(command);"#;
 
-        let performance_table = r#"
-        CREATE TABLE IF NOT EXISTS performance_items (
-            perf_id     INTEGER NOT NULL PRIMARY KEY,
-            metrics     FLOAT NOT NULL,
-            history_id  INTEGER NOT NULL
-            REFERENCES history_items(history_id) ON DELETE CASCADE ON UPDATE CASCADE
-          );
-        "#;
+        Ok(conn.execute(history_table, [])?)
 
-        conn.execute(history_table, [])?;
-        Ok(conn.execute(performance_table, [])?)
+        // let performance_table = r#"
+        // CREATE TABLE IF NOT EXISTS performance_items (
+        //     perf_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+        //     metrics     FLOAT NOT NULL,
+        //     history_id  INTEGER NOT NULL
+        //     REFERENCES history_items(history_id) ON DELETE CASCADE ON UPDATE CASCADE
+        //   );
+        // "#;
+
+        // Ok(conn.execute(performance_table, [])?)
     }
 
     fn save_raw(tx: &mut Transaction, h: &HistoryItem) -> Result<usize> {
@@ -143,8 +131,8 @@ impl Sqlite {
         // We don't need the history_id here because it's an auto number field
         // so it should be ever increasing
         Ok(tx.execute(
-            "insert or ignore into history_items (command_line, command, command_params, cwd, duration, exit_status, session_id, timestamp, run_count) values(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![h.command_line.as_str(), h.command.as_str(), cmd_params, h.cwd.as_str(), h.duration, h.exit_status, h.session_id, h.timestamp.timestamp_nanos(), h.run_count]
+            "insert or ignore into history_items (history_id, command_line, command, command_params, cwd, duration, exit_status, session_id, timestamp, run_count) values(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![h.history_id, h.command_line.as_str(), h.command.as_str(), cmd_params, h.cwd.as_str(), h.duration, h.exit_status, h.session_id, h.timestamp.timestamp_nanos(), h.run_count]
         )?)
     }
 
@@ -169,7 +157,8 @@ impl Sqlite {
     }
 
     fn query_history(row: &Row) -> Result<HistoryItem> {
-        Ok(HistoryItem {
+        debug!("constructing historyitem from row");
+        let h = HistoryItem {
             history_id: row.get("history_id")?,
             command_line: row.get("command_line")?,
             command: row.get("command")?,
@@ -180,7 +169,9 @@ impl Sqlite {
             session_id: row.get("session_id")?,
             timestamp: Utc.timestamp_nanos(row.get("timestamp")?),
             run_count: row.get("run_count")?,
-        })
+        };
+        debug!("HistoryItem: {:#?}", &h);
+        Ok(h)
     }
 }
 
@@ -270,7 +261,7 @@ fn set_log_mode(connection: &mut Connection, sql_log_mode: SqlLogMode) {
 impl Database for Sqlite {
     fn save(&mut self, h: &HistoryItem) -> Result<()> {
         debug!("saving history to sqlite");
-
+        debug!("HistoryItem: {:#?}", &h);
         let mut tx = self.conn.transaction()?;
         Self::save_raw(&mut tx, h)?;
         Ok(tx.commit()?)
@@ -291,57 +282,16 @@ impl Database for Sqlite {
     fn load(&self, id: &str) -> Result<HistoryItem> {
         debug!("loading history item {}", id);
 
-        // let res = conn
-        //     .execute("select * from history_items where history_id = ?1")
-        //     .bind(id)
-        //     .map(Self::query_history)
-        //     .fetch_one(&self.pool)
-        //     .await?;
-
         let mut stmt = self
             .conn
             .prepare("select * from history_items where history_id = ?1")?;
-        // let mut rows = stmt.query(params![id])?;
-        // let arow = match rows.next()? {
-        //     Some(r) => *r,
-        //     None => return Err(anyhow::Error::msg("blah")),
-        // };
-        // let row = Self::query_history(arow)?;
-
-        let ro = stmt.query_row(params![id], |r| Ok(Self::query_history(r)))?;
-        ro
-
-        // let mut rows = stmt.query(params![id])?;
-        // // let rows = rows.map(|r| Ok(Self::query_history(r))).collect();
-        // // let row = rows.and_then(|f| Self::query_history(*f)).collect();
-        // // let row = Self::query_history(rows)?;
-
-        // // Ok(row)
-        // if let Some(row) = rows.next()? {
-        //     return Self::query_history(row);
-        // } else {
-        //     Err(anyhow::Error::msg("blah"))
-        // }
+        let row = stmt.query_row(params![id], |r| Ok(Self::query_history(r)))?;
+        row
     }
 
     fn update(&self, h: &HistoryItem) -> Result<usize> {
         debug!("updating sqlite history");
-        debug!("history_item = [{:?}]", &h);
-
-        // conn.execute(
-        //     "update history_items
-        //         set timestamp = ?2, duration = ?3, exit_status = ?4, command = ?5, cwd = ?6, session_id = ?7
-        //         where history_id = ?1",
-        // )
-        // .bind(h.history_id)
-        // .bind(h.timestamp.timestamp_nanos())
-        // .bind(h.duration)
-        // .bind(h.exit_status)
-        // .bind(h.command.as_str())
-        // .bind(h.cwd.as_str())
-        // .bind(h.session_id)
-        // .execute(&self.pool)
-        // .await?;
+        debug!("history_item = [{:#?}]", &h);
 
         let cmd_params = match h.command_params.as_ref() {
             Some(p) => &p,
@@ -351,7 +301,7 @@ impl Database for Sqlite {
         Ok(self.conn.execute(
             "update history_items
             set command_line = ?1, command = ?2, command_params = ?3, cwd = ?4, duration = ?5,
-            exit_status = ?6, session_id = ?7, timestamp = ?8, run_count = 9?",
+            exit_status = ?6, session_id = ?7, timestamp = ?8, run_count = ?9 where history_id = ?10",
             params![
                 h.command_line.as_str(),
                 h.command.as_str(),
@@ -361,7 +311,8 @@ impl Database for Sqlite {
                 h.exit_status,
                 h.session_id,
                 h.timestamp.timestamp_nanos(),
-                h.run_count
+                h.run_count,
+                h.history_id
             ],
         )?)
     }
@@ -396,28 +347,20 @@ impl Database for Sqlite {
             }
         );
 
-        // let res = conn
-        //     .execute(query.as_str())
-        //     .map(Self::query_history)
-        //     .fetch_all(&self.pool)
-        //     .await?;
-
-        // Ok(res)
         let mut hist_rows: Vec<HistoryItem> = Vec::new();
         let mut stmt = self.conn.prepare(query.as_str())?;
+        // debug!("SQL: {}", stmt.expanded_sql().unwrap());
 
-        let rows = stmt.query_map([], |row| {
-            let res = Self::query_history(row);
-            hist_rows.push(res.unwrap());
-            Ok(())
-        })?;
+        // let mut rows = stmt.query([])?;
+        // for row in rows.next()? {
+        //     let hi = Self::query_history(row)?;
+        //     hist_rows.push(hi);
+        // }
 
-        // let rows = stmt.query([])?;
-        // rows.map(|r| {
-        //     let res = Self::query_history(r);
-        //     hist_rows.push(res.unwrap());
-        //     Ok(())
-        // });
+        let rows = stmt.query_and_then([], |row| Self::query_history(row))?;
+        for row in rows {
+            hist_rows.push(row?);
+        }
 
         Ok(hist_rows)
     }
@@ -429,81 +372,50 @@ impl Database for Sqlite {
     ) -> Result<Vec<HistoryItem>> {
         debug!("listing history from {:?} to {:?}", from, to);
 
-        // let res = conn.execute(
-        //     "select * from history_items where timestamp >= ?1 and timestamp <= ?2 order by timestamp asc",
-        // )
-        // .bind(from.timestamp_nanos())
-        // .bind(to.timestamp_nanos())
-        //     .map(Self::query_history)
-        // .fetch_all(&self.pool)
-        // .await?;
-
-        // let mut rows = stmt.query(params![id])?;
         let mut hist_rows: Vec<HistoryItem> = Vec::new();
 
         let mut stmt = self.conn.prepare("select * from history_items where timestamp >= ?1 and timestamp <= ?2 order by timestamp asc")?;
-        // let rows = stmt.query(params![from.timestamp_nanos(), to.timestamp_nanos()])?;
-        let rows = stmt.query_map(
-            params![from.timestamp_nanos(), to.timestamp_nanos()],
-            |row| {
-                let res = Self::query_history(row);
-                hist_rows.push(res.unwrap());
-                Ok(())
-            },
-        )?;
+
+        let rows = stmt
+            .query_and_then([&from.timestamp_nanos(), &to.timestamp_nanos()], |row| {
+                Self::query_history(row)
+            })?;
+        for row in rows {
+            hist_rows.push(row?);
+        }
 
         Ok(hist_rows)
     }
 
     fn history_count(&self) -> Result<i64> {
-        // let res: (i64,) = conn
-        //     .execute_as("select count(1) from history_items")
-        //     .fetch_one(&self.pool)
-        //     .await?;
-
-        // Ok(res.0)
-
         let mut stmt = self.conn.prepare("select count(1) from history_items")?;
 
-        // let ro = stmt.query_row(params![id], |r| Ok(Self::query_history(r)))?;
-        // ro
         let cnt = stmt.query_row([], |r| r.get(0))?;
         Ok(cnt)
     }
 
     fn first(&self) -> Result<HistoryItem> {
-        // let res = conn
-        //     .execute(
-        //         "select * from history_items where duration >= 0 order by timestamp asc limit 1",
-        //     )
-        //     .map(Self::query_history)
-        //     .fetch_one(&self.pool)
-        //     .await?;
+        // let mut stmt = self.conn.prepare(
+        //     "select * from history_items where duration >= 0 order by timestamp asc limit 1",
+        // )?;
 
-        // Ok(res)
-
-        let mut stmt = self.conn.prepare(
-            "select * from history_items where duration >= 0 order by timestamp asc limit 1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("select * from history_items order by timestamp asc limit 1")?;
 
         let row = stmt.query_row([], |r| Ok(Self::query_history(r)))?;
         row
     }
 
     fn last(&self) -> Result<HistoryItem> {
-        // let res = conn
-        //     .execute(
-        //         "select * from history_items where duration >= 0 order by timestamp desc limit 1",
-        //     )
-        //     .map(Self::query_history)
-        //     .fetch_one(&self.pool)
-        //     .await?;
+        // let mut stmt = self.conn.prepare(
+        //     "select * from history_items where duration >= 0 order by timestamp desc limit 1",
+        // )?;
+        let mut stmt = self
+            .conn
+            .prepare("select * from history_items order by timestamp desc limit 1")?;
 
-        // Ok(res)
-        let mut stmt = self.conn.prepare(
-            "select * from history_items where duration >= 0 order by timestamp desc limit 1",
-        )?;
-
+        // debug!("sql: {}", stmt.expanded_sql().unwrap());
         let row = stmt.query_row([], |r| Ok(Self::query_history(r)))?;
         row
     }
@@ -526,11 +438,24 @@ impl Database for Sqlite {
         let mut stmt = self.conn.prepare(
             "select * from history_items where timestamp < ?1 order by timestamp desc limit ?2",
         )?;
-        let rows = stmt.query_map(params![timestamp.timestamp_nanos(), count], |row| {
-            let res = Self::query_history(row);
-            hist_rows.push(res.unwrap());
-            Ok(())
+        // let rows = stmt.query_map(params![timestamp.timestamp_nanos(), count], |row| {
+        //     let res = Self::query_history(row);
+        //     hist_rows.push(res.unwrap());
+        //     Ok(())
+        // })?;
+
+        // let mut rows = stmt.query([timestamp.timestamp_nanos(), count])?;
+        // for row in rows.next()? {
+        //     let hi = Self::query_history(row)?;
+        //     hist_rows.push(hi);
+        // }
+
+        let rows = stmt.query_and_then([timestamp.timestamp_nanos(), count], |row| {
+            Self::query_history(row)
         })?;
+        for row in rows {
+            hist_rows.push(row?);
+        }
 
         Ok(hist_rows)
     }
@@ -541,6 +466,7 @@ impl Database for Sqlite {
         search_mode: SearchMode,
         query: &str,
     ) -> Result<Vec<HistoryItem>> {
+        debug!("starting search");
         let query = query.to_string().replace("*", "%"); // allow wildcard char
         let limit = limit.map_or("".to_owned(), |l| format!("limit {}", l));
 
@@ -564,34 +490,12 @@ impl Database for Sqlite {
             )
             .as_str(),
         )?;
-
-        let rows = stmt.query_map([], |row| {
-            let res = Self::query_history(row);
-            hist_rows.push(res.unwrap());
-            Ok(())
-        })?;
+        let rows = stmt.query_and_then([&query], |row| Self::query_history(row))?;
+        for row in rows {
+            hist_rows.push(row?);
+        }
 
         Ok(hist_rows)
-
-        // .execute(
-        //     format!(
-        //         "select * from history_items h
-        //     where command like ?1 || '%'
-        //     and timestamp = (
-        //             select max(timestamp) from history_items
-        //             where h.command = history_items.command
-        //         )
-        //     order by timestamp desc {}",
-        //         limit.clone()
-        //     )
-        //     .as_str(),
-        // )
-        // .bind(query)
-        // .map(Self::query_history)
-        // .fetch_all(&self.pool)
-        // .await?;
-
-        // Ok(res)
     }
 
     fn query_history(&self, query: &str) -> Result<Vec<HistoryItem>> {
@@ -606,11 +510,22 @@ impl Database for Sqlite {
         let mut hist_rows: Vec<HistoryItem> = Vec::new();
         let mut stmt = self.conn.prepare(query)?;
 
-        let rows = stmt.query_map([], |row| {
-            let res = Self::query_history(row);
-            hist_rows.push(res.unwrap());
-            Ok(())
-        })?;
+        // let rows = stmt.query_map([], |row| {
+        //     let res = Self::query_history(row);
+        //     hist_rows.push(res.unwrap());
+        //     Ok(())
+        // })?;
+
+        // let mut rows = stmt.query([])?;
+        // for row in rows.next()? {
+        //     let hi = Self::query_history(row)?;
+        //     hist_rows.push(hi);
+        // }
+
+        let rows = stmt.query_and_then([], |row| Self::query_history(row))?;
+        for row in rows {
+            hist_rows.push(row?);
+        }
 
         // let rows = stmt.query([])?;
         // rows.map(|r| {
@@ -622,20 +537,13 @@ impl Database for Sqlite {
         Ok(hist_rows)
     }
 
-    fn delete_history_item(&self, id: i64) -> Result<u64> {
-        // let res = conn
-        //     .execute("delete from history_items where history_id = ?1")
-        //     .bind(id)
-        //     .execute(&self.pool)
-        //     .await?
-        //     .rows_affected();
-        // Ok(res)
-
+    fn delete_history_item(&self, id: i64) -> Result<i64> {
         let mut stmt = self
             .conn
             .prepare("delete from history_items where history_id = ?1")?;
         stmt.execute(params![id])?;
-        Ok(1u64)
+        Ok(self.conn.last_insert_rowid())
+        // Ok(self.conn.changes())
     }
 }
 

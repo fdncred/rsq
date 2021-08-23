@@ -108,11 +108,11 @@ fn main(args: Args) -> Result<(), anyhow::Error> {
     debug!("starting main");
     start(args)?;
 
-    let db_path = PathBuf::from("C:\\Users\\dschroeder\\source\\repos\\forks\\sql\\rsq\\hizzy3.db");
-    let sqlite = match Sqlite::new(db_path, database::SqlLogMode::Trace) {
-        Ok(r) => r,
-        Err(e) => return Err(e), //return Err(anyhow::Error::msg("erro")),
-    };
+    // let db_path = PathBuf::from("C:\\Users\\dschroeder\\source\\repos\\forks\\sql\\rsq\\hizzy3.db");
+    // let sqlite = match Sqlite::new(db_path, database::SqlLogMode::Trace) {
+    //     Ok(r) => r,
+    //     Err(e) => return Err(e), //return Err(anyhow::Error::msg("erro")),
+    // };
 
     Ok(())
 }
@@ -120,8 +120,8 @@ fn main(args: Args) -> Result<(), anyhow::Error> {
 fn start(args: Args) -> Result<(), anyhow::Error> {
     debug!("starting second_attempt");
 
-    let db_path =
-        PathBuf::from("C:\\Users\\dschroeder\\source\\repos\\forks\\sql\\hiztery\\hizzy.db");
+    let db_path = PathBuf::from("my_hizzy.db");
+    // PathBuf::from("C:\\Users\\dschroeder\\source\\repos\\forks\\sql\\hiztery\\hizzy.db");
     let mut sqlite = match Sqlite::new(db_path, database::SqlLogMode::Trace) {
         Ok(r) => r,
         // Err(e) => anyhow::bail!("unexpected error: {}", e),
@@ -150,10 +150,6 @@ fn start(args: Args) -> Result<(), anyhow::Error> {
                 );
 
                 let result = sqlite.save(&hi)?;
-                // match result {
-                //     Ok(r) => r,
-                //     Err(e) => return Err(e),
-                // }
             }
         }
         Some(HizteryCmd::Update {
@@ -176,10 +172,6 @@ fn start(args: Args) -> Result<(), anyhow::Error> {
             );
 
             let result = sqlite.update(&hi)?;
-            // match result {
-            //     Ok(r) => r,
-            //     Err(e) => return Err(e),
-            // }
         }
         Some(HizteryCmd::Delete { history_id }) => {
             // cargo run -- delete -i 3
@@ -231,10 +223,6 @@ fn start(args: Args) -> Result<(), anyhow::Error> {
             debug!("Preparing for save_bulk");
             let result = sqlite.save_bulk(&history_vec)?;
             let cnt = sqlite.history_count()?;
-            //  {
-            //     Ok(c) => c,
-            //     _ => 0i64,
-            // };
             debug!("Imported [{}] history entries", cnt);
         }
         Some(HizteryCmd::Search {
