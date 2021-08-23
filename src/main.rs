@@ -4,7 +4,7 @@
 pub mod database;
 pub mod history_item;
 
-use database::{Database, Sqlite};
+use database::Sqlite;
 // use crate::history_item::HistoryItem;
 // use chrono::{DateTime, NaiveDate};
 use lazy_static::lazy_static;
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
     debug!("starting main");
 
     let db_path = PathBuf::from("C:\\Users\\dschroeder\\source\\repos\\forks\\sql\\rsq\\hizzy3.db");
-    let mut sqlite = match Sqlite::new(db_path, database::SqlLogMode::Trace) {
+    let sqlite = match Sqlite::new(db_path, database::SqlLogMode::Trace) {
         Ok(r) => r,
         Err(e) => return Err(e), //return Err(anyhow::Error::msg("erro")),
     };

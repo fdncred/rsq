@@ -312,17 +312,20 @@ impl Database for Sqlite {
         // };
         // let row = Self::query_history(arow)?;
 
-        let mut rows = stmt.query(params![id])?;
-        // let rows = rows.map(|r| Ok(Self::query_history(r))).collect();
-        // let row = rows.and_then(|f| Self::query_history(*f)).collect();
-        // let row = Self::query_history(rows)?;
+        let ro = stmt.query_row(params![id], |r| Ok(Self::query_history(r)))?;
+        ro
 
-        // Ok(row)
-        if let Some(row) = rows.next()? {
-            return Self::query_history(row);
-        } else {
-            Err(anyhow::Error::msg("blah"))
-        }
+        // let mut rows = stmt.query(params![id])?;
+        // // let rows = rows.map(|r| Ok(Self::query_history(r))).collect();
+        // // let row = rows.and_then(|f| Self::query_history(*f)).collect();
+        // // let row = Self::query_history(rows)?;
+
+        // // Ok(row)
+        // if let Some(row) = rows.next()? {
+        //     return Self::query_history(row);
+        // } else {
+        //     Err(anyhow::Error::msg("blah"))
+        // }
     }
 
     fn update(&self, h: &HistoryItem) -> Result<usize> {
@@ -406,12 +409,19 @@ impl Database for Sqlite {
         // Ok(res)
         let mut hist_rows: Vec<HistoryItem> = Vec::new();
         let mut stmt = self.conn.prepare(query.as_str())?;
-        let rows = stmt.query([])?;
-        rows.map(|r| {
-            let res = Self::query_history(r);
+
+        let rows = stmt.query_map([], |row| {
+            let res = Self::query_history(row);
             hist_rows.push(res.unwrap());
             Ok(())
-        });
+        })?;
+
+        // let rows = stmt.query([])?;
+        // rows.map(|r| {
+        //     let res = Self::query_history(r);
+        //     hist_rows.push(res.unwrap());
+        //     Ok(())
+        // });
 
         Ok(hist_rows)
     }
