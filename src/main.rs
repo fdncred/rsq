@@ -183,6 +183,7 @@ fn start(args: Args) -> Result<(), anyhow::Error> {
         Some(HizteryCmd::Import {
             nushell_history_filepath,
         }) => {
+            // cargo run -- --file c:\path\to\nushell\history.txt
             debug!("Import with file: {}", &nushell_history_filepath);
             let file = File::open(nushell_history_filepath);
             let mut reader = BufReader::new(file.unwrap());
@@ -303,7 +304,7 @@ fn start(args: Args) -> Result<(), anyhow::Error> {
             }
         }
         Some(HizteryCmd::All {}) => {
-            // cargo run -- last
+            // cargo run -- all
             debug!("Looking for all the history items.");
             let result = sqlite.query_history("select * from history_items")?;
             debug!("Found {} hits", result.len());
