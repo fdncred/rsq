@@ -12,6 +12,6 @@ itertools = "0.10.1"
 lazy_static = "1.4.0"
 log = "0.4.14"
 paw = "1.0.0"
-rusqlite = {version = "0.25.3", features = ["chrono", "bundled", "trace"]}
+rusqlite = {version = "0.27.0", features = ["chrono", "bundled", "trace"]}
 simplelog = "0.10.0"
 structopt = { version = "0.3", features = ["paw"] }
